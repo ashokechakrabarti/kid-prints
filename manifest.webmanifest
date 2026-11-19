@@ -1,0 +1,15 @@
+{
+  "name": "Doodle Pop 3D",
+  "short_name": "Doodle Pop",
+  "description": "Turn a kid's drawing into a 3D-printable model.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff8ef",
+  "theme_color": "#ff7a59",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Doodle Pop 3D</title>
+<meta name="description" content="Turn a kid's drawing into a 3D-printable model.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-512.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Doodle Pop">
+<meta name="theme-color" content="#ff7a59">
+<style>
+  :root {
+    --bg: #fff8ef; --ink: #2b2140; --accent: #ff7a59; --accent2: #5b8cff;
+    --good: #2fbf71; --card: #ffffff; --muted: #8a7f99;
+    --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
+    font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, sans-serif; }
+  button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+  .screen { position: fixed; inset: 0; display: none; }
+  .screen.on { display: block; }
+
+  /* ---------- Home ---------- */
+  #home { display: none; flex-direction: column; align-items: center; justify-content: center;
+    padding: calc(24px + var(--safe-t)) 20px calc(24px + var(--safe-b)); text-align: center; gap: 16px; }
+  #home.on { display: flex; }
+  #home h1 { font-size: 40px; margin: 0; line-height: 1.05; letter-spacing: -0.5px; }
+  #home h1 span { color: var(--accent); }
+  #home p { margin: 0; color: var(--muted); font-size: 17px; max-width: 340px; }
+  .big { width: min(340px, 100%); padding: 22px 18px; border-radius: 26px; font-size: 24px; font-weight: 800;
+    background: var(--accent); color: #fff; box-shadow: 0 6px 0 #d95a3b; display: flex; align-items: center;
+    justify-content: center; gap: 12px; }
+  .big:active { transform: translateY(4px); box-shadow: 0 2px 0 #d95a3b; }
+  .big.blue { background: var(--accent2); box-shadow: 0 6px 0 #3d6ae0; }
+  .big.blue:active { box-shadow: 0 2px 0 #3d6ae0; }
+  .link { background: none; color: var(--accent2); font-weight: 700; font-size: 16px; padding: 8px; text-decoration: underline; }
+  .emoji { font-size: 64px; line-height: 1; }
+
+  /* ---------- Editor ---------- */
+  #view { position: absolute; inset: 0; touch-action: none; }
+  #view canvas { display: block; width: 100%; height: 100%; }
+  .topbar { position: absolute; left: 0; right: 0; top: 0; padding: calc(10px + var(--safe-t)) 12px 10px;
+    display: flex; gap: 8px; align-items: center; pointer-events: none; }
+  .topbar > * { pointer-events: auto; }
+  .pill { background: var(--card); border-radius: 999px; padding: 10px 14px; font-weight: 800; font-size: 16px;
+    box-shadow: 0 2px 10px rgba(43,33,64,.15); }
+  #dims { margin-left: auto; font-size: 13px; color: var(--muted); font-weight: 700; }
+  .dock { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 10px calc(12px + var(--safe-b));
+    display: flex; flex-direction: column; gap: 10px; align-items: center; pointer-events: none; }
+  .dock > * { pointer-events: auto; }
+  .tools { display: flex; gap: 8px; background: var(--card); padding: 8px; border-radius: 24px;
+    box-shadow: 0 4px 18px rgba(43,33,64,.18); max-width: 100%; }
+  .tool { width: 62px; height: 62px; border-radius: 18px; background: #f3eefa; font-size: 28px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+  .tool small { font-size: 11px; font-weight: 800; margin-top: 3px; color: var(--muted); }
+  .tool.on { background: var(--accent2); }
+  .tool.on small { color: #fff; }
+  .row { display: flex; gap: 10px; align-items: center; width: min(420px, 100%); }
+  #mic { width: 84px; height: 84px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 38px;
+    box-shadow: 0 6px 0 #d95a3b; flex: none; }
+  #mic.listening { background: #e8364a; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { transform: scale(1.08); } }
+  #mic.hidden { display: none; }
+  .wide { flex: 1; height: 64px; border-radius: 22px; font-size: 20px; font-weight: 800; background: var(--card);
+    box-shadow: 0 4px 0 #e3dbef; }
+  .wide.go { background: var(--good); color: #fff; box-shadow: 0 4px 0 #1f9a57; }
+  #toast { position: absolute; left: 50%; top: calc(70px + var(--safe-t)); transform: translateX(-50%);
+    background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 18px; font-weight: 700;
+    font-size: 17px; max-width: calc(100% - 32px); text-align: center; opacity: 0; transition: opacity .25s;
+    pointer-events: none; }
+  #toast.on { opacity: 1; }
+
+  /* ---------- Sheets ---------- */
+  .sheet-bg { position: fixed; inset: 0; background: rgba(43,33,64,.35); display: none; z-index: 10; }
+  .sheet-bg.on { display: block; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--card); border-radius: 26px 26px 0 0;
+    padding: 18px 20px calc(20px + var(--safe-b)); max-height: 85vh; overflow-y: auto; }
+  .sheet h2 { margin: 0 0 12px; font-size: 22px; }
+  .sheet h2 button { float: right; background: #f3eefa; border-radius: 50%; width: 36px; height: 36px; font-size: 18px; }
+  .field { margin: 14px 0; }
+  .field label { display: flex; justify-content: space-between; font-weight: 800; font-size: 16px; margin-bottom: 6px; }
+  .field label span { color: var(--muted); font-weight: 700; }
+  input[type=range] { width: 100%; height: 34px; accent-color: var(--accent2); }
+  .toggles { display: flex; gap: 10px; flex-wrap: wrap; }
+  .tog { flex: 1; min-width: 130px; padding: 14px; border-radius: 16px; background: #f3eefa; font-weight: 800; font-size: 16px; }
+  .tog.on { background: var(--accent2); color: #fff; }
+  .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sw { width: 42px; height: 42px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 2px #e3dbef; }
+  .sw.on { box-shadow: 0 0 0 3px var(--ink); }
+  .sheet .big { width: 100%; margin: 10px 0; font-size: 20px; padding: 18px; }
+  .tips { color: var(--muted); font-size: 14px; line-height: 1.45; }
+  .tips b { color: var(--ink); }
+  .warn { background: #fff1d6; color: #7a5300; padding: 10px 12px; border-radius: 12px; font-size: 14px; font-weight: 700; display: none; }
+  .warn.on { display: block; }
+  #busy { position: fixed; inset: 0; background: rgba(255,248,239,.85); display: none; z-index: 20;
+    align-items: center; justify-content: center; font-size: 22px; font-weight: 800; flex-direction: column; gap: 12px; }
+  #busy.on { display: flex; }
+  #busy .emoji { animation: spin 1.2s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+
+<!-- ================= HOME ================= -->
+<section id="home" class="screen on">
+  <div class="emoji">🖍️➡️🧸</div>
+  <h1>Doodle Pop <span>3D</span></h1>
+  <p>Take a picture of your drawing and we'll turn it into something you can print!</p>
+  <button class="big" id="btnCamera">📷 Take a picture</button>
+  <button class="big blue" id="btnGallery">🖼️ Pick a photo</button>
+  <button class="link" id="btnSample">or try a sample drawing</button>
+  <p style="font-size:14px">Tip: dark marker on white paper works best. Get close so the drawing fills the picture.</p>
+  <input type="file" id="fileCamera" accept="image/*" capture="environment" hidden>
+  <input type="file" id="fileGallery" accept="image/*" hidden>
+</section>
+
+<!-- ================= EDITOR ================= -->
+<section id="editor" class="screen">
+  <div id="view"></div>
+  <div class="topbar">
+    <button class="pill" id="btnHome">🏠</button>
+    <button class="pill" id="btnUndo">↩️ Undo</button>
+    <div class="pill" id="dims">100 × 80 × 6 mm</div>
+  </div>
+  <div id="toast"></div>
+  <div class="dock">
+    <div class="tools">
+      <button class="tool on" data-mode="look">👆<small>Spin</small></button>
+      <button class="tool" data-mode="draw">✏️<small>Draw</small></button>
+      <button class="tool" data-mode="erase">🧽<small>Erase</small></button>
+      <button class="tool" id="btnSettings">🎛️<small>Change</small></button>
+    </div>
+    <div class="row">
+      <button id="mic" aria-label="Talk">🎤</button>
+      <button class="wide go" id="btnPrint">🖨️ Print it!</button>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SETTINGS SHEET ================= -->
+<div class="sheet-bg" id="settingsSheet">
+  <div class="sheet">
+    <h2>Change it <button data-close>✕</button></h2>
+    <div class="field"><label>Size <span id="vSize"></span></label>
+      <input type="range" id="size" min="30" max="200" step="5"></div>
+    <div class="field"><label>How tall <span id="vHeight"></span></label>
+      <input type="range" id="height" min="2" max="20" step="0.5"></div>
+    <div class="field"><label>Line thickness <span id="vLines"></span></label>
+      <input type="range" id="lines" min="0" max="6" step="1"></div>
+    <div class="field"><label>Pick up light lines <span id="vDark"></span></label>
+      <input type="range" id="dark" min="0.5" max="0.95" step="0.01"></div>
+    <div class="toggles">
+      <button class="tog" id="tBase">🟫 Base plate</button>
+      <button class="tog" id="tFill">🎨 Fill shapes</button>
+    </div>
+    <div class="field"><label>Color (just for looking — pick your filament!)</label>
+      <div class="swatches" id="swatches"></div></div>
+    <button class="link" id="btnReset">Start over with this picture</button>
+  </div>
+</div>
+
+<!-- ================= PRINT SHEET ================= -->
+<div class="sheet-bg" id="printSheet">
+  <div class="sheet">
+    <h2>Ready to print! 🎉 <button data-close>✕</button></h2>
+    <div class="warn" id="sizeWarn">This is bigger than the A1 bed (256 mm). Make it smaller first.</div>
+    <p class="tips" id="printDims"></p>
+    <button class="big" id="btn3mf">📦 Save 3MF (best for Bambu)</button>
+    <button class="big blue" id="btnStl">🧊 Save STL</button>
+    <p class="tips">
+      <b>To print on the A1:</b> tap a button above, then pick <b>Bambu Handy</b> or <b>Files</b> in the share menu
+      (or AirDrop it to a computer with <b>Bambu Studio</b>). It's already lying flat and in millimeters, so you can slice it as-is.<br><br>
+      <b>Good starting settings:</b> 0.2 mm layers, 15% infill, no supports needed. PLA works great.
+    </p>
+  </div>
+</div>
+
+<div id="busy"><div class="emoji">🌀</div><div id="busyText">Making magic…</div></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const $ = (s) => document.querySelector(s);
+const GRID = 160;        // model resolution (cells along the long side)
+const PROC = 480;        // image processing resolution
+const MARGIN = 6;        // empty cells around the drawing (room for the base)
+const BED = 256;         // Bambu A1 build plate (mm)
+
+const DEFAULTS = { size: 100, height: 6, base: true, baseT: 1.6, lines: 2, fill: false, dark: 0.78, color: '#ff7a59' };
+const COLORS = { red: '#e8364a', orange: '#ff7a59', yellow: '#ffd23f', green: '#2fbf71', blue: '#5b8cff',
+  purple: '#9b5de5', pink: '#ff6fb5', white: '#f4f1ea', black: '#333038', brown: '#9c6b3e', gray: '#9aa0a6' };
+
+let P = { ...DEFAULTS };
+let src = null;            // processed photo data
+let edits = null;          // finger edits: 0 none, 1 added, 2 erased
+let baseCache = { key: '', mask: null };
+let heights = null;
+let undoStack = [];
+let mode = 'look';
+let dirty = false;
+
+/* =====================================================================
+   1. PHOTO -> DRAWING MASK
+   ===================================================================== */
+function analyzePhoto(img) {
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const s = PROC / Math.max(iw, ih);
+  const w = Math.max(1, Math.round(iw * s)), h = Math.max(1, Math.round(ih * s));
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+
+  // "inkiness": mix of brightness and darkest channel so colored crayons count too
+  const v = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
+    v[i] = 0.5 * (0.299 * r + 0.587 * g + 0.114 * b) + 0.5 * Math.min(r, g, b);
+  }
+
+  // estimate paper brightness per tile (90th percentile) to cancel shadows / uneven light
+  const T = 8, tw = Math.ceil(w / T), th = Math.ceil(h / T);
+  const nx = Math.ceil(w / tw), ny = Math.ceil(h / th);
+  const tile = new Float32Array(nx * ny);
+  for (let ty = 0; ty < ny; ty++) for (let tx = 0; tx < nx; tx++) {
+    const vals = [];
+    for (let y = ty * th; y < Math.min(h, (ty + 1) * th); y++)
+      for (let x = tx * tw; x < Math.min(w, (tx + 1) * tw); x++) vals.push(v[y * w + x]);
+    vals.sort((a, b) => a - b);
+    tile[ty * nx + tx] = Math.max(40, vals[Math.floor(vals.length * 0.9)] || 255);
+  }
+  const ratio = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const fy = Math.min(ny - 1, Math.max(0, (y + 0.5) / th - 0.5));
+    const y0 = Math.floor(fy), y1 = Math.min(ny - 1, y0 + 1), ay = fy - y0;
+    for (let x = 0; x < w; x++) {
+      const fx = Math.min(nx - 1, Math.max(0, (x + 0.5) / tw - 0.5));
+      const x0 = Math.floor(fx), x1 = Math.min(nx - 1, x0 + 1), ax = fx - x0;
+      const bg = (tile[y0 * nx + x0] * (1 - ax) + tile[y0 * nx + x1] * ax) * (1 - ay)
+               + (tile[y1 * nx + x0] * (1 - ax) + tile[y1 * nx + x1] * ax) * ay;
+      ratio[y * w + x] = v[y * w + x] / bg;
+    }
+  }
+
+  // crop to the drawing (ignore a thin band at the photo edges: table, paper edges)
+  const band = Math.round(Math.max(w, h) * 0.03);
+  let bx0 = w, by0 = h, bx1 = -1, by1 = -1;
+  for (let y = band; y < h - band; y++) for (let x = band; x < w - band; x++) {
+    if (ratio[y * w + x] < DEFAULTS.dark) {
+      if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y;
+    }
+  }
+  if (bx1 < 0) { bx0 = band; by0 = band; bx1 = w - band - 1; by1 = h - band - 1; }
+  const bw = bx1 - bx0 + 1, bh = by1 - by0 + 1;
+  const cp = Math.max(bw, bh) / (GRID - 2 * MARGIN);       // photo pixels per cell
+  const gw = Math.ceil(bw / cp) + 2 * MARGIN, gh = Math.ceil(bh / cp) + 2 * MARGIN;
+  return { w, h, ratio, band, bx0, by0, bw, bh, cp, gw, gh };
+}
+
+function dilate(m, gw, gh, r) {
+  if (r <= 0) return m;
+  const out = new Uint8Array(m.length), offs = [];
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r + r) offs.push([dx, dy]);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    if (!m[y * gw + x]) continue;
+    for (const [dx, dy] of offs) {
+      const X = x + dx, Y = y + dy;
+      if (X >= 0 && Y >= 0 && X < gw && Y < gh) out[Y * gw + X] = 1;
+    }
+  }
+  return out;
+}
+
+// label connected blobs (8-connected); drop blobs smaller than min
+function removeSpecks(m, gw, gh, min) {
+  const seen = new Uint8Array(m.length), out = new Uint8Array(m), stack = [], blob = [];
+  for (let i = 0; i < m.length; i++) {
+    if (!m[i] || seen[i]) continue;
+    blob.length = 0; stack.push(i); seen[i] = 1;
+    while (stack.length) {
+      const j = stack.pop(); blob.push(j);
+      const x = j % gw, y = (j / gw) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const X = x + dx, Y = y + dy;
+        if (X < 0 || Y < 0 || X >= gw || Y >= gh) continue;
+        const k = Y * gw + X;
+        if (m[k] && !seen[k]) { seen[k] = 1; stack.push(k); }
+      }
+    }
+    if (blob.length < min) for (const j of blob) out[j] = 0;
+  }
+  return out;
+}
+
+// fill every empty area that can't be reached from the outside
+function fillHoles(m, gw, gh) {
+  const outside = new Uint8Array(m.length), stack = [];
+  const push = (x, y) => { const k = y * gw + x; if (!m[k] && !outside[k]) { outside[k] = 1; stack.push(k); } };
+  for (let x = 0; x < gw; x++) { push(x, 0); push(x, gh - 1); }
+  for (let y = 0; y < gh; y++) { push(0, y); push(gw - 1, y); }
+  while (stack.length) {
+    const k = stack.pop(), x = k % gw, y = (k / gw) | 0;
+    if (x > 0) push(x - 1, y); if (x < gw - 1) push(x + 1, y);
+    if (y > 0) push(x, y - 1); if (y < gh - 1) push(x, y + 1);
+  }
+  const out = new Uint8Array(m.length);
+  for (let i = 0; i < m.length; i++) out[i] = outside[i] ? 0 : 1;
+  return out;
+}
+
+function drawingMask() {
+  const key = [P.dark, P.lines].join('|');
+  if (baseCache.key === key) return baseCache.mask;
+  const { w, ratio, band, bx0, by0, bw, bh, cp, gw, gh, h } = src;
+  let m = new Uint8Array(gw * gh);
+  for (let y = Math.max(by0, band); y < Math.min(by0 + bh, h - band); y++)
+    for (let x = Math.max(bx0, band); x < Math.min(bx0 + bw, w - band); x++) {
+      if (ratio[y * w + x] >= P.dark) continue;
+      const gx = Math.floor((x - bx0) / cp) + MARGIN, gy = Math.floor((y - by0) / cp) + MARGIN;
+      m[gy * gw + gx] = 1;
+    }
+  m = removeSpecks(m, gw, gh, 3);
+  m = dilate(m, gw, gh, P.lines);
+  baseCache = { key, mask: m };
+  return m;
+}
+
+function computeHeights() {
+  const { gw, gh } = src;
+  const m = new Uint8Array(drawingMask());
+  for (let i = 0; i < m.length; i++) { if (edits[i] === 1) m[i] = 1; else if (edits[i] === 2) m[i] = 0; }
+  const hm = new Float32Array(gw * gh);
+  if (P.base) {
+    const b = fillHoles(dilate(m, gw, gh, 3), gw, gh);
+    for (let i = 0; i < hm.length; i++) if (b[i]) hm[i] = P.baseT;
+  }
+  if (P.fill) { // filled shapes sit a bit lower so the drawn lines still pop out on top
+    const f = fillHoles(m, gw, gh), fh = Math.max(P.baseT, P.height * 0.6);
+    for (let i = 0; i < hm.length; i++) if (f[i]) hm[i] = Math.max(hm[i], fh);
+  }
+  for (let i = 0; i < hm.length; i++) if (m[i]) hm[i] = P.height;
+  // remove cells that touch only at a corner (checkerboards) so the mesh stays solid/manifold
+  for (let changed = true, pass = 0; changed && pass < 20; pass++) {
+    changed = false;
+    for (let y = 0; y < gh - 1; y++) for (let x = 0; x < gw - 1; x++) {
+      const i = y * gw + x, a = hm[i], b = hm[i + 1], c = hm[i + gw], d = hm[i + gw + 1];
+      if (Math.min(a, d) > Math.max(b, c)) { hm[i + 1] = Math.min(a, d); changed = true; }
+      else if (Math.min(b, c) > Math.max(a, d)) { hm[i] = Math.min(b, c); changed = true; }
+    }
+  }
+  return hm;
+}
+
+/* =====================================================================
+   2. HEIGHT MAP -> WATERTIGHT MESH (Y is up; X/Z is the build plate)
+   ===================================================================== */
+function cellSize() { return P.size / Math.max(src.gw, src.gh); }
+function origin() { const c = cellSize(); return [-src.gw * c / 2, -src.gh * c / 2]; }
+
+function buildMesh(hm) {
+  const { gw, gh } = src, c = cellSize(), [ox, oz] = origin();
+  const pos = [], nor = [];
+  const H = (x, z) => (x < 0 || z < 0 || x >= gw || z >= gh) ? 0 : hm[z * gw + x];
+  const quad = (a, b, cc, d, n) => {
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [cc[0] - a[0], cc[1] - a[1], cc[2] - a[2]];
+    const cr = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    if (cr[0] * n[0] + cr[1] * n[1] + cr[2] * n[2] < 0) { const t = b; b = d; d = t; }
+    pos.push(...a, ...b, ...cc, ...a, ...cc, ...d);
+    for (let i = 0; i < 6; i++) nor.push(...n);
+  };
+  // every wall is split at every height level in use, so neighbouring walls share edges exactly
+  const levels = [...new Set([0, ...hm])].sort((a, b) => a - b);
+  const wall = (lo, hi, f) => { for (let k = 0; k < levels.length - 1; k++) {
+    const a = levels[k], b = levels[k + 1]; if (a >= lo && b <= hi) f(a, b); } };
+  for (let z = 0; z < gh; z++) for (let x = 0; x < gw; x++) {
+    const h = H(x, z); if (!h) continue;
+    const x0 = ox + x * c, x1 = x0 + c, z0 = oz + z * c, z1 = z0 + c;
+    quad([x0, h, z0], [x1, h, z0], [x1, h, z1], [x0, h, z1], [0, 1, 0]);
+    quad([x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1], [0, -1, 0]);
+    wall(H(x - 1, z), h, (lo, hi) => quad([x0, lo, z0], [x0, lo, z1], [x0, hi, z1], [x0, hi, z0], [-1, 0, 0]));
+    wall(H(x + 1, z), h, (lo, hi) => quad([x1, lo, z0], [x1, lo, z1], [x1, hi, z1], [x1, hi, z0], [1, 0, 0]));
+    wall(H(x, z - 1), h, (lo, hi) => quad([x0, lo, z0], [x1, lo, z0], [x1, hi, z0], [x0, hi, z0], [0, 0, -1]));
+    wall(H(x, z + 1), h, (lo, hi) => quad([x0, lo, z1], [x1, lo, z1], [x1, hi, z1], [x0, hi, z1], [0, 0, 1]));
+  }
+  return { pos: new Float32Array(pos), nor: new Float32Array(nor) };
+}
+
+/* =====================================================================
+   3. 3D VIEW + FINGER EDITING
+   ===================================================================== */
+const view = $('#view');
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#fff8ef');
+const camera = new THREE.PerspectiveCamera(40, 1, 1, 5000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.49; controls.autoRotateSpeed = 4;
+scene.add(new THREE.HemisphereLight('#ffffff', '#b9a98f', 1.6));
+const sun = new THREE.DirectionalLight('#ffffff', 1.8); sun.position.set(80, 160, 120); scene.add(sun);
+const grid = new THREE.GridHelper(BED, 16, '#e3d6c4', '#efe5d6'); grid.position.y = -0.05; scene.add(grid);
+const material = new THREE.MeshStandardMaterial({ color: P.color, roughness: 0.55, metalness: 0.0 });
+const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
+scene.add(mesh);
+
+function resize() {
+  const w = view.clientWidth || innerWidth, h = view.clientHeight || innerHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+
+function fitCamera() {
+  const d = P.size * 1.6 + 40;
+  camera.position.set(0, d * 0.85, d * 0.75); controls.target.set(0, 0, 0); controls.update();
+}
+
+function rebuild() {
+  heights = computeHeights();
+  const { pos, nor } = buildMesh(heights);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  mesh.geometry.dispose(); mesh.geometry = g;
+  const c = cellSize();
+  let x0 = 1e9, x1 = -1, z0 = 1e9, z1 = -1;
+  for (let i = 0; i < heights.length; i++) if (heights[i] > 0) {
+    const x = i % src.gw, z = (i / src.gw) | 0;
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+  }
+  const W = x1 >= 0 ? (x1 - x0 + 1) * c : 0, D = z1 >= 0 ? (z1 - z0 + 1) * c : 0;
+  $('#dims').textContent = `${W.toFixed(0)} × ${D.toFixed(0)} × ${P.height} mm`;
+  $('#printDims').textContent = `Your model is ${W.toFixed(0)} × ${D.toFixed(0)} mm and ${P.height} mm tall.`;
+  $('#sizeWarn').classList.toggle('on', W > BED || D > BED);
+  window.__model = { triangles: pos.length / 9, W, D };
+}
+
+function loop() {
+  requestAnimationFrame(loop);
+  if (dirty && src) { dirty = false; rebuild(); }
+  controls.update(); renderer.render(scene, camera);
+}
+
+// finger drawing on the model
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+let painting = false, last = null;
+function cellAt(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const p = new THREE.Vector3();
+  if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -P.height), p)) return null;
+  const c = cellSize(), [ox, oz] = origin();
+  return [(p.x - ox) / c, (p.z - oz) / c];
+}
+function stamp(cx, cz) {
+  const r = mode === 'draw' ? Math.max(1.5, P.lines + 0.5) : 3.5, v = mode === 'draw' ? 1 : 2;
+  for (let z = Math.floor(cz - r); z <= Math.ceil(cz + r); z++)
+    for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+      if (x < 0 || z < 0 || x >= src.gw || z >= src.gh) continue;
+      if ((x + 0.5 - cx) ** 2 + (z + 0.5 - cz) ** 2 <= r * r) edits[z * src.gw + x] = v;
+    }
+  dirty = true;
+}
+function paintTo(e) {
+  const p = cellAt(e); if (!p) return;
+  if (last) {
+    const steps = Math.ceil(Math.hypot(p[0] - last[0], p[1] - last[1]));
+    for (let i = 1; i <= steps; i++) stamp(last[0] + (p[0] - last[0]) * i / steps, last[1] + (p[1] - last[1]) * i / steps);
+  } else stamp(p[0], p[1]);
+  last = p;
+}
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (mode === 'look' || !src) return;
+  painting = true; last = null; pushUndo(); paintTo(e);
+  renderer.domElement.setPointerCapture(e.pointerId);
+});
+renderer.domElement.addEventListener('pointermove', (e) => { if (painting) paintTo(e); });
+const endPaint = () => { painting = false; last = null; };
+renderer.domElement.addEventListener('pointerup', endPaint);
+renderer.domElement.addEventListener('pointercancel', endPaint);
+
+function setMode(m) {
+  mode = m; controls.enabled = m === 'look';
+  document.querySelectorAll('.tool[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
+}
+document.querySelectorAll('.tool[data-mode]').forEach((b) => b.onclick = () => {
+  setMode(b.dataset.mode);
+  toast({ look: 'Drag to spin, pinch to zoom 👌', draw: 'Draw on your model with your finger ✏️', erase: 'Rub out the bits you don\'t want 🧽' }[b.dataset.mode]);
+});
+
+/* =====================================================================
+   4. UNDO + SETTINGS
+   ===================================================================== */
+function pushUndo() {
+  undoStack.push({ P: { ...P }, edits: new Uint8Array(edits) });
+  if (undoStack.length > 40) undoStack.shift();
+}
+function undo() {
+  const s = undoStack.pop(); if (!s) { toast('Nothing to undo'); return false; }
+  P = s.P; edits = s.edits; syncUI(); dirty = true; return true;
+}
+function change(fn) { pushUndo(); fn(); P.size = clamp(P.size, 30, 200); P.height = clamp(P.height, 2, 20);
+  P.lines = clamp(P.lines, 0, 6); syncUI(); dirty = true; }
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+function syncUI() {
+  $('#size').value = P.size; $('#vSize').textContent = P.size + ' mm';
+  $('#height').value = P.height; $('#vHeight').textContent = P.height + ' mm';
+  $('#lines').value = P.lines; $('#vLines').textContent = ['hairline', 'thin', 'normal', 'bold', 'chunky', 'extra chunky', 'MEGA'][P.lines];
+  $('#dark').value = P.dark; $('#vDark').textContent = Math.round((P.dark - 0.5) / 0.45 * 100) + '%';
+  $('#tBase').classList.toggle('on', P.base); $('#tFill').classList.toggle('on', P.fill);
+  material.color.set(P.color);
+  document.querySelectorAll('.sw').forEach((s) => s.classList.toggle('on', s.dataset.c === P.color));
+}
+for (const [id, k] of [['size', 'size'], ['height', 'height'], ['lines', 'lines'], ['dark', 'dark']]) {
+  const el = $('#' + id);
+  el.addEventListener('pointerdown', pushUndo);
+  el.addEventListener('input', () => { P[k] = parseFloat(el.value); syncUI(); dirty = true; });
+}
+$('#tBase').onclick = () => change(() => P.base = !P.base);
+$('#tFill').onclick = () => change(() => P.fill = !P.fill);
+for (const [name, hex] of Object.entries(COLORS)) {
+  const b = document.createElement('button'); b.className = 'sw'; b.style.background = hex; b.dataset.c = hex; b.title = name;
+  b.onclick = () => { P.color = hex; syncUI(); }; $('#swatches').appendChild(b);
+}
+$('#btnReset').onclick = () => change(() => { P = { ...DEFAULTS, color: P.color }; edits.fill(0); });
+$('#btnUndo').onclick = undo;
+$('#btnSettings').onclick = () => $('#settingsSheet').classList.add('on');
+$('#btnPrint').onclick = () => $('#printSheet').classList.add('on');
+document.querySelectorAll('.sheet-bg').forEach((bg) => {
+  bg.addEventListener('click', (e) => { if (e.target === bg || e.target.hasAttribute('data-close')) bg.classList.remove('on'); });
+});
+
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 2200);
+}
+function say(msg) {
+  toast(msg);
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(msg.replace(/[^\w\s!?,.'']/g, '')); u.rate = 1.05; u.pitch = 1.2; speechSynthesis.speak(u); } catch {}
+}
+
+/* =====================================================================
+   5. VOICE COMMANDS
+   ===================================================================== */
+const COMMANDS = [
+  [/\b(bigger|larger|grow|huge|giant)\b/, () => change(() => P.size = Math.round(P.size * 1.25 / 5) * 5), 'Bigger!'],
+  [/\b(smaller|tiny|little|shrink)\b/, () => change(() => P.size = Math.round(P.size / 1.25 / 5) * 5), 'Smaller!'],
+  [/\b(taller|higher|thicker|puffier|tall|tower)\b/, () => change(() => P.height += 2), 'Taller!'],
+  [/\b(shorter|flatter|flat|thinner|lower|squish)\b/, () => change(() => P.height -= 2), 'Flatter!'],
+  [/\b(bold|chunky|chunkier|fat|fatter|bolder)\b/, () => change(() => P.lines += 1), 'Chunkier lines!'],
+  [/\b(skinny|skinnier|thin lines|thinner lines)\b/, () => change(() => P.lines -= 1), 'Skinnier lines!'],
+  [/\b(no|remove|take off|without|delete|get rid of)\b.*\b(base|plate|bottom)\b/, () => change(() => P.base = false), 'No base plate!'],
+  [/^(?!.*\b(no|remove|take off|without|delete|get rid of)\b).*\b(base|plate|bottom)\b/, () => change(() => P.base = true), 'Base plate on!'],
+  [/\b(fill|colou?r (it )?in|solid)\b/, () => change(() => P.fill = true), 'Filled in!'],
+  [/\b(outline|empty|hollow|lines only)\b/, () => change(() => P.fill = false), 'Just the lines!'],
+  [/\b(spin|rotate|turn|twirl)\b/, () => { controls.autoRotate = true; setMode('look'); }, 'Wheee!'],
+  [/\b(stop)\b/, () => { controls.autoRotate = false; }, 'Stopped.'],
+  [/\b(draw|pencil|paint|crayon)\b/, () => setMode('draw'), 'Draw with your finger!'],
+  [/\b(erase|eraser|rub)\b/, () => setMode('erase'), 'Rub out with your finger!'],
+  [/\b(undo|oops|go back|whoops)\b/, () => undo(), 'Undone!'],
+  [/\b(reset|start over)\b/, () => change(() => { P = { ...DEFAULTS, color: P.color }; edits.fill(0); }), 'Starting over!'],
+  [/\b(print|save|done|finished|finish)\b/, () => $('#printSheet').classList.add('on'), 'Ready to print!'],
+];
+function runVoice(alternatives) {
+  for (const raw of alternatives) {
+    const text = raw.toLowerCase();
+    const replies = [];
+    for (const [re, fn, reply] of COMMANDS) if (re.test(text)) { fn(); replies.push(reply); }
+    for (const [name, hex] of Object.entries(COLORS)) if (new RegExp(`\\b${name}\\b`).test(text)) {
+      P.color = hex; syncUI(); replies.push(`Ooh, ${name}!`); break;
+    }
+    if (replies.length) { say(replies.join(' ')); return true; }
+  }
+  say(`I heard "${alternatives[0] || '…'}". Try "bigger", "taller" or "make it blue"!`);
+  return false;
+}
+window.__runVoice = runVoice; // handy for testing
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const mic = $('#mic');
+if (!SR) mic.classList.add('hidden');
+else {
+  let rec = null;
+  mic.onclick = () => {
+    if (rec) { rec.stop(); return; }
+    rec = new SR(); rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 4;
+    rec.onresult = (e) => runVoice(Array.from(e.results[0]).map((a) => a.transcript));
+    rec.onerror = (e) => { if (e.error === 'not-allowed') say('I need permission to use the microphone.'); };
+    rec.onend = () => { rec = null; mic.classList.remove('listening'); };
+    try { speechSynthesis.cancel(); } catch {}
+    rec.start(); mic.classList.add('listening'); toast('Listening… say "bigger" or "make it red"');
+  };
+}
+
+/* =====================================================================
+   6. EXPORT: STL + 3MF  (converted to Z-up, centered on the A1 bed)
+   ===================================================================== */
+function printTriangles() {
+  const pos = mesh.geometry.getAttribute('position').array;
+  const out = new Float32Array(pos.length);
+  for (let i = 0; i < pos.length; i += 3) { // three.js Y-up -> printer Z-up (rotation, keeps winding)
+    out[i] = pos[i] + BED / 2; out[i + 1] = -pos[i + 2] + BED / 2; out[i + 2] = pos[i + 1];
+  }
+  return out;
+}
+
+function makeSTL() {
+  const v = printTriangles(), n = v.length / 9;
+  const buf = new ArrayBuffer(84 + n * 50), dv = new DataView(buf);
+  const head = 'Doodle Pop 3D'; for (let i = 0; i < head.length; i++) dv.setUint8(i, head.charCodeAt(i));
+  dv.setUint32(80, n, true);
+  for (let t = 0, o = 84; t < n; t++, o += 50) {
+    const a = t * 9;
+    const ux = v[a + 3] - v[a], uy = v[a + 4] - v[a + 1], uz = v[a + 5] - v[a + 2];
+    const wx = v[a + 6] - v[a], wy = v[a + 7] - v[a + 1], wz = v[a + 8] - v[a + 2];
+    let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+    const l = Math.hypot(nx, ny, nz) || 1;
+    dv.setFloat32(o, nx / l, true); dv.setFloat32(o + 4, ny / l, true); dv.setFloat32(o + 8, nz / l, true);
+    for (let k = 0; k < 9; k++) dv.setFloat32(o + 12 + k * 4, v[a + k], true);
+  }
+  return new Blob([buf], { type: 'model/stl' });
+}
+
+async function make3MF() {
+  const v = printTriangles(), index = new Map(), verts = [], tris = [];
+  const id = (i) => {
+    const key = `${v[i].toFixed(3)},${v[i + 1].toFixed(3)},${v[i + 2].toFixed(3)}`;
+    let k = index.get(key);
+    if (k === undefined) { k = verts.length; index.set(key, k); verts.push(`<vertex x="${v[i].toFixed(3)}" y="${v[i + 1].toFixed(3)}" z="${v[i + 2].toFixed(3)}"/>`); }
+    return k;
+  };
+  for (let a = 0; a < v.length; a += 9) {
+    const p = id(a), q = id(a + 3), r = id(a + 6);
+    if (p !== q && q !== r && p !== r) tris.push(`<triangle v1="${p}" v2="${q}" v3="${r}"/>`);
+  }
+  const model = `<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">` +
+    `<metadata name="Title">Doodle Pop 3D</metadata><resources><object id="1" name="Doodle" type="model"><mesh><vertices>${verts.join('')}</vertices>` +
+    `<triangles>${tris.join('')}</triangles></mesh></object></resources><build><item objectid="1"/></build></model>`;
+  const types = `<?xml version="1.0" encoding="UTF-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+    `<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>`;
+  const enc = new TextEncoder();
+  return zip([['[Content_Types].xml', enc.encode(types)], ['_rels/.rels', enc.encode(rels)], ['3D/3dmodel.model', enc.encode(model)]]);
+}
+
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = (d) => { let c = 0xFFFFFFFF; for (let i = 0; i < d.length; i++) c = CRC[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+async function deflate(data) {
+  if (typeof CompressionStream === 'undefined') return null;
+  try { return new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer()); }
+  catch { return null; }
+}
+async function zip(files) {
+  const parts = [], central = []; let offset = 0;
+  for (const [name, data] of files) {
+    const nb = new TextEncoder().encode(name), crc = crc32(data);
+    const packed = await deflate(data), method = packed ? 8 : 0, body = packed || data;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(8, method, true);
+    lh.setUint16(12, 33, true); lh.setUint32(14, crc, true); lh.setUint32(18, body.length, true);
+    lh.setUint32(22, data.length, true); lh.setUint16(26, nb.length, true);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(10, method, true);
+    ch.setUint16(14, 33, true); ch.setUint32(16, crc, true); ch.setUint32(20, body.length, true);
+    ch.setUint32(24, data.length, true); ch.setUint16(28, nb.length, true); ch.setUint32(42, offset, true);
+    parts.push(lh, nb, body); central.push(ch, nb);
+    offset += 30 + nb.length + body.length;
+  }
+  const cdSize = central.reduce((s, p) => s + p.byteLength, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, end], { type: 'model/3mf' });
+}
+
+async function deliver(blob, name) {
+  const file = new File([blob], name, { type: blob.type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Doodle Pop 3D' }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+}
+const stamp8 = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+$('#btnStl').onclick = () => deliver(makeSTL(), `doodle-${stamp8()}.stl`);
+$('#btn3mf').onclick = async () => { busy(true, 'Packing your model…'); const b = await make3MF(); busy(false); deliver(b, `doodle-${stamp8()}.3mf`); };
+window.__export = { makeSTL, make3MF };
+
+/* =====================================================================
+   7. HOME SCREEN / LOADING
+   ===================================================================== */
+function busy(on, text) { $('#busy').classList.toggle('on', on); if (text) $('#busyText').textContent = text; }
+function show(id) { document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === id)); }
+
+function loadImage(img) {
+  busy(true, 'Turning your drawing into 3D…');
+  setTimeout(() => {
+    src = analyzePhoto(img);
+    P = { ...DEFAULTS, color: P.color };
+    edits = new Uint8Array(src.gw * src.gh); undoStack = []; baseCache = { key: '', mask: null };
+    show('editor'); resize(); syncUI(); rebuild(); fitCamera(); setMode('look');
+    busy(false);
+    say('Ta-da! Spin it with your finger, or tap the microphone and tell me what to change.');
+  }, 50);
+}
+function loadFile(file) {
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => { loadImage(img); URL.revokeObjectURL(img.src); };
+  img.onerror = () => toast('Hmm, I couldn\'t open that picture.');
+  img.src = URL.createObjectURL(file);
+}
+$('#btnCamera').onclick = () => $('#fileCamera').click();
+$('#btnGallery').onclick = () => $('#fileGallery').click();
+$('#fileCamera').onchange = (e) => { loadFile(e.target.files[0]); e.target.value = ''; };
+$('#fileGallery').onchange = (e) => { loadFile(e.target.files[0]); e.target.value = ''; };
+$('#btnHome').onclick = () => { controls.autoRotate = false; show('home'); };
+
+// a pretend photo of a kid's drawing (with uneven lighting) so you can try it without a camera
+$('#btnSample').onclick = () => {
+  const c = document.createElement('canvas'); c.width = 900; c.height = 700;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 900, 700); grad.addColorStop(0, '#f6f2ea'); grad.addColorStop(1, '#b9b2a6');
+  g.fillStyle = grad; g.fillRect(0, 0, 900, 700);
+  g.strokeStyle = '#2a2a33'; g.lineWidth = 9; g.lineCap = g.lineJoin = 'round';
+  g.beginPath(); g.arc(450, 390, 190, 0, Math.PI * 2); g.stroke();                       // head
+  g.beginPath(); g.moveTo(300, 270); g.lineTo(290, 110); g.lineTo(400, 210); g.stroke(); // ears
+  g.beginPath(); g.moveTo(600, 270); g.lineTo(610, 110); g.lineTo(500, 210); g.stroke();
+  g.fillStyle = '#2a2a33';
+  g.beginPath(); g.arc(380, 360, 22, 0, 7); g.fill(); g.beginPath(); g.arc(520, 360, 22, 0, 7); g.fill(); // eyes
+  g.beginPath(); g.moveTo(430, 430); g.lineTo(470, 430); g.lineTo(450, 455); g.closePath(); g.fill();   // nose
+  g.beginPath(); g.arc(425, 470, 25, 0, Math.PI); g.stroke(); g.beginPath(); g.arc(475, 470, 25, 0, Math.PI); g.stroke();
+  for (const s of [-1, 1]) for (const dy of [-15, 15]) { g.beginPath(); g.moveTo(450 + s * 90, 450 + dy); g.lineTo(450 + s * 240, 440 + dy * 2.5); g.stroke(); }
+  const img = new Image(); img.onload = () => loadImage(img); img.src = c.toDataURL();
+};
+
+resize(); syncUI(); loop();
+</script>
+</body>
+</html>
